@@ -1,0 +1,398 @@
+\documentclass[a4paper, 12pt, twoside]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[francais]{babel}
+\usepackage{lmodern}
+\usepackage{ae,aecompl}
+\usepackage[top=2.5cm, bottom=2cm,
+			left=3cm, right=2.5cm,
+			headheight=15pt]{geometry}
+\usepackage{graphicx}
+\usepackage{eso-pic}
+\usepackage{array}
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{amsmath}   % \mathbb, \to, etc.
+\usepackage{amssymb}   % \mathbb{R}
+
+\lstset{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    language=Python,
+    keywordstyle=\color{blue},
+    commentstyle=\color{green!50!black},
+    stringstyle=\color{red},
+    numbers=left,
+    numberstyle=\tiny,
+    numbersep=5pt
+}
+
+\input{pagedegarde}
+\title{Analyse du réseau de bus en Île-de-France}
+\membrea{Rayane MEKSEM}
+\membreb{Ryan JARDIN}
+\membrec{Monju DEY}
+
+\begin{document}
+\pagedegarde
+
+% ----------------------------------------------------------------
+\section*{Remerciements}
+Nous tenons à remercier notre enseignant responsable du module Graphes et OpenData pour son accompagnement tout au long de ce projet. Nous remercions également Île-de-France Mobilités pour la mise à disposition des données ouvertes relatives au réseau de transport en commun francilien, sans lesquelles ce travail n'aurait pas été possible.
+
+\newpage
+\tableofcontents
+\newpage
+
+% ----------------------------------------------------------------
+\section{Introduction}
+
+\paragraph{Attention !} Vous devez impérativement utiliser ce template pour réaliser votre rapport de projet d'harmonisation. Vous n'avez pas le droit de changer la taille, la police, l'interligne ou les marges.\\
+
+L'Île-de-France est la région la plus peuplée de France avec près de 12 millions d'habitants répartis sur 8 départements. Son réseau de transport en commun, géré par Île-de-France Mobilités, est l'un des plus denses d'Europe. Il comprend notamment un vaste réseau de bus composé de plus de 1\,500 lignes et 25\,000 arrêts.
+
+Ce projet exploite les données ouvertes publiées par Île-de-France Mobilités \cite{IDFM} au format GTFS (\textit{General Transit Feed Specification}) \cite{GTFSDOC} pour modéliser le réseau de bus francilien sous forme de graphe et en analyser les propriétés structurelles à l'aide d'algorithmes classiques.
+
+Le Tableau~\ref{tab:gtfs} présente les fichiers GTFS utilisés. La Figure~\ref{fig:subgraph} donne un aperçu du graphe construit.
+
+\begin{table}[h]
+\begin{center}
+\begin{tabular}{|l|l|r|}
+\hline
+\textbf{Fichier} & \textbf{Contenu} & \textbf{Entrées (approx.)} \\
+\hline
+\texttt{stops.txt}       & Arrêts de bus           & $\sim$25\,000     \\
+\texttt{routes.txt}      & Lignes de bus           & $\sim$1\,500      \\
+\texttt{trips.txt}       & Trajets planifiés       & $\sim$500\,000    \\
+\texttt{stop\_times.txt} & Horaires par arrêt      & $\sim$8\,000\,000 \\
+\hline
+\end{tabular}
+\end{center}
+\caption{Fichiers GTFS d'Île-de-France Mobilités utilisés pour le projet}
+\label{tab:gtfs}
+\end{table}
+
+Et ne jamais oublier que lorsqu'on place un tableau, on doit l'utiliser comme ici avec le tableau Table~\ref{tab:gtfs}. Et on fait la même chose avec une image, comme avec la Figure~\ref{fig:subgraph}.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{figures/fig1_subgraph.pdf}
+\caption{Sous-graphe des 150 arrêts les plus connectés du réseau de bus IDF. La couleur et la taille des nœuds sont proportionnelles à leur degré.}
+\label{fig:subgraph}
+\end{figure}
+
+% ----------------------------------------------------------------
+\section{Environnement de travail}
+
+Le projet a été développé dans l'environnement suivant :
+
+\begin{itemize}
+    \item \textbf{Système d'exploitation :} Ubuntu 20.04 LTS 
+    \item \textbf{Langage de programmation :} Python 3.9
+    \item \textbf{Environnement de développement :} Visual Studio Code, Jupyter Notebook
+    \item \textbf{Gestion de version :} GitHub 
+    \item \textbf{Matériel :} Ordinateurs portables personnels (8 Go RAM, processeur Intel Core i5)
+\end{itemize}
+
+La collaboration a été facilitée par GitHub pour le partage du code et Discord pour la communication.
+
+% ----------------------------------------------------------------
+\section{Description du projet et objectifs}
+
+	\subsection{Modélisation du réseau sous forme de graphe}
+
+	Le réseau de bus est modélisé comme un \textbf{graphe orienté pondéré} $G = (V, E, w)$ où :
+	\begin{itemize}
+	    \item $V$ est l'ensemble des sommets : chaque arrêt de bus est un noeud.
+	    \item $E$ est l'ensemble des arêtes orientées : deux arrêts $u$ et $v$ sont reliés par un arc $u \rightarrow v$ s'il existe un trajet de bus qui les dessert consécutivement.
+	    \item $w : E \rightarrow \mathbb{R}^+$ est la fonction de poids : le poids d'un arc est le temps de trajet moyen (en secondes) entre les deux arrêts, calculé à partir du fichier \texttt{stop\_times.txt}.
+	\end{itemize}
+
+	Le graphe est \textbf{orienté} car les lignes de bus ne sont pas nécessairement symétriques (sens aller $\neq$ sens retour) et \textbf{pondéré} car les temps de trajet varient d'un tronçon à l'autre.
+
+	\subsection{Objectifs du projet}
+
+	Les objectifs concrets sont les suivants :
+	\begin{itemize}
+	    \item Charger et parser les données GTFS d'Île-de-France Mobilités.
+	    \item Construire le graphe du réseau de bus avec la bibliothèque NetworkX \cite{NETWORKX}.
+	    \item Calculer des indicateurs structurels : degré moyen, distribution des degrés, connexité.
+	    \item Identifier les arrêts les plus importants par la centralité d'intermédiarité (\textit{betweenness centrality}).
+	    \item Trouver le plus court chemin entre deux arrêts avec l'algorithme de Dijkstra \cite{DIJKSTRA}.
+	    \item Visualiser et interpréter les résultats sous forme de figures.
+	\end{itemize}
+
+% ----------------------------------------------------------------
+\section{Bibliothèques, Outils et technologies}
+
+\begin{table}[h]
+\begin{center}
+\begin{tabular}{|l|c|l|}
+\hline
+\textbf{Bibliothèque} & \textbf{Version} & \textbf{Usage} \\
+\hline
+\texttt{NetworkX}   & 2.6  & Construction et analyse du graphe \\
+\texttt{Pandas}     & 1.3  & Chargement et filtrage des fichiers GTFS \\
+\texttt{Matplotlib} & 3.4  & Génération des figures \\
+\texttt{Folium}     & 0.12 & Cartographie interactive \\
+\texttt{NumPy}      & 1.21 & Calculs numériques \\
+\hline
+\end{tabular}
+\end{center}
+\caption{Bibliothèques Python utilisées dans le projet}
+\label{tab:libs}
+\end{table}
+
+Les données sont au format GTFS, un ensemble de fichiers CSV standardisés (voir Table~\ref{tab:gtfs}). Pandas permet de les charger et filtrer efficacement avant de construire le graphe avec NetworkX.
+
+% ----------------------------------------------------------------
+\section{Travail réalisé}
+
+La liste des fonctionnalités prévues et l'état de réalisation sont présentés dans le Tableau~\ref{tab:fonc}.
+
+\begin{table}[h]
+\begin{center}
+\begin{tabular}{|p{7cm}|c|p{4.5cm}|}
+\hline
+\textbf{Fonctionnalité} & \textbf{Réalisée} & \textbf{Commentaire} \\
+\hline
+Chargement des données GTFS             & Oui & Filtrage sur bus (type 3) \\
+Construction du graphe orienté pondéré  & Oui & NetworkX DiGraph \\
+Visualisation du sous-graphe            & Oui & Figure \ref{fig:subgraph} \\
+Distribution des degrés                 & Oui & Figure \ref{fig:degres} \\
+Centralité (betweenness)                & Oui & Figure \ref{fig:central} \\
+Plus court chemin (Dijkstra)            & Oui & Figure \ref{fig:dijkstra} \\
+Composantes connexes                    & Oui & Figure \ref{fig:compo} \\
+Interface graphique utilisateur         & Non & Manque de temps \\
+\hline
+\end{tabular}
+\end{center}
+\caption{Liste des fonctionnalités prévues et état de réalisation}
+\label{tab:fonc}
+\end{table}
+
+La fonctionnalité d'interface graphique n'a pas été réalisée faute de temps : la gestion du volume des données GTFS et le débogage des algorithmes ont été plus chronophages que prévu.\\
+
+\noindent\textbf{Résultats obtenus.} Après construction à partir des données GTFS, le graphe présente les caractéristiques structurelles suivantes :
+
+\begin{table}[h]
+\begin{center}
+\begin{tabular}{|l|r|}
+\hline
+\textbf{Indicateur} & \textbf{Valeur} \\
+\hline
+Nombre de sommets (arrêts)                & $\approx 24\,800$ \\
+Nombre d'arêtes (liaisons)                & $\approx 62\,000$ \\
+Degré moyen                               & $\approx 5.0$     \\
+Nombre de composantes faiblement connexes & 312               \\
+Taille de la composante principale        & 98\% des sommets  \\
+\hline
+\end{tabular}
+\end{center}
+\caption{Caractéristiques structurelles du graphe du réseau de bus IDF}
+\label{tab:stats}
+\end{table}
+
+\noindent\textbf{Figure 2 — Distribution des degrés.}\\
+La Figure~\ref{fig:degres} montre que la majorité des arrêts possède un faible degré (entre 2 et 6), tandis qu'un petit nombre de noeuds présentent un degré très élevé. Cette distribution hétérogène est caractéristique des réseaux de transport organisés autour de hubs.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{figures/fig2_degree_distribution.pdf}
+\caption{Distribution des degrés du réseau. À gauche : histogramme (ligne rouge = degré moyen). À droite : même distribution en échelle log-log.}
+\label{fig:degres}
+\end{figure}
+
+\noindent\textbf{Figure 3 — Centralité d'intermédiarité.}\\
+La Figure~\ref{fig:central} présente le top 15 des arrêts les plus centraux. Ces arrêts correspondent aux grands hubs de correspondance ; leur suppression fragiliserait fortement la connexité du réseau.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{figures/fig3_centrality.pdf}
+\caption{Top 15 des arrêts selon la centralité d'intermédiarité (\textit{betweenness centrality}), calculée par échantillonnage ($k = 500$).}
+\label{fig:central}
+\end{figure}
+
+\noindent\textbf{Figure 4 — Plus court chemin par l'algorithme de Dijkstra.}\\
+L'algorithme de Dijkstra \cite{DIJKSTRA} est appliqué sur le graphe pondéré (poids = temps en secondes). La Figure~\ref{fig:dijkstra} illustre le chemin optimal calculé entre deux arrêts.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{figures/fig4_shortest_path.pdf}
+\caption{Plus court chemin (en rouge) entre deux deux arrêts au hasard calculé par Dijkstra. Noeuds rouges : départ/arrivée. Noeuds oranges : arrêts intermédiaires.}
+\label{fig:dijkstra}
+\end{figure}
+
+\noindent\textbf{Figure 5 — Composantes connexes.}\\
+La Figure~\ref{fig:compo} montre que le réseau est quasi-connexe : la composante géante englobe $\approx$98\% des arrêts. Les petites composantes isolées correspondent à des arrêts en zones périphériques sans correspondance avec le reste du réseau.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{figures/fig5_components.pdf}
+\caption{Analyse des composantes connexes. À gauche : répartition (la composante géante représente 98\% des noeuds). À droite : distribution des tailles en échelle logarithmique.}
+\label{fig:compo}
+\end{figure}
+
+\noindent\textbf{Extrait de code — construction du graphe :}
+
+\begin{lstlisting}[caption={Chargement GTFS et construction du graphe NetworkX}]
+import pandas as pd
+import networkx as nx
+
+stops      = pd.read_csv("data/stops.txt", dtype=str)
+stop_times = pd.read_csv("data/stop_times.txt", dtype=str)
+stop_times["stop_sequence"] = stop_times["stop_sequence"].astype(int)
+
+G = nx.DiGraph()
+for _, row in stops.iterrows():
+    G.add_node(row["stop_id"], name=row["stop_name"],
+               lat=float(row["stop_lat"]),
+               lon=float(row["stop_lon"]))
+
+st = stop_times.sort_values(["trip_id", "stop_sequence"])
+for trip_id, group in st.groupby("trip_id"):
+    group = group.reset_index(drop=True)
+    for i in range(len(group) - 1):
+        u = group.loc[i,   "stop_id"]
+        v = group.loc[i+1, "stop_id"]
+        w = parse_time(group.loc[i+1, "arrival_time"]) \
+          - parse_time(group.loc[i,   "departure_time"])
+        if w > 0:
+            G.add_edge(u, v, weight=w)
+\end{lstlisting}
+
+\noindent\textbf{Répartition réelle du travail entre les membres du groupe :}
+
+\begin{table}[h]
+\begin{center}
+\begin{tabular}{|l|p{9cm}|}
+\hline
+\textbf{Membre} & \textbf{Tâches réalisées} \\
+\hline
+MEKSEM & Chargement GTFS, construction du graphe, calcul des indicateurs, figures 1 et 2 \\
+JARDIN & Dijkstra, betweenness centrality, figures 3/4/5 \\
+DEY & rédaction du rapport \\
+\hline
+\end{tabular}
+\end{center}
+\caption{Répartition réelle du travail entre les membres du groupe}
+\label{tab:travail}
+\end{table}
+
+% ----------------------------------------------------------------
+\section{Difficultés rencontrées}
+
+\begin{enumerate}
+    \item \textbf{Volume des données :} Le fichier \texttt{stop\_times.txt} contient plusieurs millions de lignes. Le chargement direct saturait la mémoire vive. Nous avons résolu ce problème en chargeant les données par blocs (\textit{chunks}) avec Pandas et en filtrant immédiatement les lignes de bus (type GTFS = 3).
+
+    \item \textbf{Heures supérieures à 24h :} Le format GTFS autorise des horaires comme \texttt{25:30:00} pour les services nocturnes qui chevauchent minuit. Notre fonction de conversion a été adaptée pour gérer ces cas.
+
+    \item \textbf{Temps de calcul de la betweenness centrality :} Sur un graphe de 25\,000 noeuds, le calcul exact est prohibitif ($O(n \cdot m)$). Nous avons utilisé l'approximation par échantillonnage de NetworkX ($k = 500$ noeuds sources), réduisant le temps de calcul de plusieurs heures à quelques minutes.
+
+    \item \textbf{Visualisation du graphe complet :} Afficher 25\,000 noeuds avec Matplotlib produisait une image illisible. Nous avons choisi de représenter uniquement les 150 arrêts les plus connectés (Figure~\ref{fig:subgraph}).
+\end{enumerate}
+
+% ----------------------------------------------------------------
+\section{Bilan}
+
+	\subsection{Conclusion}
+
+	Ce projet nous a permis de mettre en pratique la théorie des graphes sur un jeu de données réel et volumineux. Nous avons modélisé le réseau de bus d'Île-de-France sous forme de graphe orienté pondéré, calculé ses indicateurs structurels et identifié les arrêts les plus stratégiques.
+
+	Les cinq figures produites montrent que le réseau présente les caractéristiques typiques d'un réseau de transport : une composante géante, une distribution des degrés hétérogène, et quelques hubs très centraux dont dépend fortement la cohérence globale du réseau.
+
+	\subsection{Perspectives}
+
+	\begin{itemize}
+	    \item \textbf{Multi-modal :} Intégrer le métro, le RER et le Transilien pour construire un graphe de transport complet.
+	    \item \textbf{Temporalité :} Distinguer les heures de pointe et les heures creuses dans les poids des arêtes pour des itinéraires plus réalistes.
+	    \item \textbf{Interface web :} Développer une application Flask permettant à l'utilisateur de calculer un itinéraire de façon interactive.
+	    \item \textbf{Résilience :} Simuler la suppression de noeuds centraux pour évaluer la robustesse du réseau face à des pannes ou perturbations.
+	\end{itemize}
+
+\newpage
+% ----------------------------------------------------------------
+\section{Bibliographie}
+\renewcommand{\bibname}{}
+\renewcommand{\refname}{}
+\begin{thebibliography}{4}
+   \bibitem[LAM94]{lam1} L. LAMPORT, {\it \LaTeX : A Document preparation system}, Addison-Wesley, 1994.
+   \bibitem[HAG08]{NETWORKX} A. HAGBERG, P. SWART, D. SCHULT, {\it Exploring Network Structure, Dynamics, and Function using NetworkX}, Proceedings of the 7th Python in Science Conference, 2008.
+   \bibitem[DIJ59]{DIJKSTRA} E.W. DIJKSTRA, {\it A note on two problems in connexion with graphs}, Numerische Mathematik, vol. 1, pp. 269--271, 1959.
+   \bibitem[GGL06]{GTFS} Google LLC, {\it GTFS Reference -- General Transit Feed Specification}, 2006.
+\end{thebibliography}
+
+\newpage
+% ----------------------------------------------------------------
+\section{Webographie}
+\begin{thebibliography}{4}
+   \bibitem[IDFM]{IDFM} \url{https://data.iledefrance-mobilites.fr} --- Portail OpenData d'Île-de-France Mobilités
+   \bibitem[NXD]{NETWORKXDOC} \url{https://networkx.org/documentation/stable/} --- Documentation NetworkX
+   \bibitem[GTFD]{GTFSDOC} \url{https://gtfs.org/reference/static/} --- Spécification GTFS
+   \bibitem[FOL]{FOLIUMDOC} \url{https://python-visualization.github.io/folium/} --- Documentation Folium
+\end{thebibliography}
+
+\newpage
+% ----------------------------------------------------------------
+\section{Annexes}
+\appendix
+\makeatletter
+\def\@seccntformat#1{Annexe~\csname the#1\endcsname:\quad}
+\makeatother
+
+	\section{Cahier des charges}
+
+	\textbf{Objectif général :} Analyser le réseau de bus en Île-de-France à l'aide de la théorie des graphes et des données ouvertes GTFS (licence ODbL).\\
+
+	\noindent\textbf{Données :} Fichiers GTFS publiés par Île-de-France Mobilités, téléchargeables sur \url{https://data.iledefrance-mobilites.fr}.\\
+
+	\noindent\textbf{Livrables attendus :}
+	\begin{itemize}
+	    \item Un programme Python documenté (\texttt{generate\_graphs.py}).
+	    \item Le présent rapport au format PDF.
+	    \item Cinq figures générées automatiquement (dossier \texttt{figures/}).
+	\end{itemize}
+
+	\section{Exemple d'exécution du projet}
+
+\begin{lstlisting}[language=bash, caption={Exécution du script principal}]
+$ pip install networkx pandas matplotlib folium numpy
+$ python generate_graphs.py
+
+Chargement des donnees GTFS...
+  24812 arrets | 1487 lignes bus | 7923045 horaires
+Construction du graphe : 24812 noeuds, 61934 aretes
+Figure 1 : sous-graphe...          -> figures/fig1_subgraph.pdf
+Figure 2 : distribution degres...  -> figures/fig2_degree_distribution.pdf
+Figure 3 : centralite...           -> figures/fig3_centrality.pdf
+Figure 4 : plus court chemin...    -> figures/fig4_shortest_path.pdf
+Figure 5 : composantes connexes... -> figures/fig5_components.pdf
+Toutes les figures sont dans ./figures/
+\end{lstlisting}
+
+	\section{Manuel utilisateur}
+
+	\textbf{Prérequis :} Python 3.8 ou supérieur, pip.\\
+
+	\noindent\textbf{Installation des dépendances :}
+\begin{lstlisting}[language=bash]
+pip install networkx pandas matplotlib folium numpy
+\end{lstlisting}
+
+	\noindent\textbf{Téléchargement des données :}
+	\begin{enumerate}
+	    \item Aller sur \url{https://data.iledefrance-mobilites.fr}
+	    \item Rechercher « GTFS » et télécharger \texttt{IDFM-gtfs.zip}
+	    \item Dézipper dans le dossier \texttt{data/} du projet
+	\end{enumerate}
+
+	\noindent\textbf{Lancement :}
+\begin{lstlisting}[language=bash]
+python3 generate_graphs.py
+\end{lstlisting}
+	Les figures PDF sont générées dans \texttt{figures/} et incluses automatiquement dans le rapport lors de la compilation avec \texttt{pdflatex}.
+
+\end{document}
